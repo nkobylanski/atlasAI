@@ -98,3 +98,39 @@ robot = PioneerP3DX_Robot(client)
 visionSensor = sim.getObject('./visionSensor')
 colors = ['red', 'green', 'blue', 'yellow']
 color_idx = 0
+
+while True:
+    distances = robot.read_ultrasonic_sensor()
+    avoidance_correction = calculate_avoidance_correction(distances)
+    
+    img = read_frame(sim, visionSensor)
+    img, detected, x, y, size = filter_color(img, colors[color_idx])
+    
+    cv.putText(img, f'Front: {min(distances[3:5]):.2f}m', (10, 20), 
+               cv.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+    cv.putText(img, f'L: {distances[15]:.2f}m R: {distances[8]:.2f}m', (10, 40), 
+               cv.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+    if avoidance_correction != 0:
+        cv.putText(img, f'Avoiding: {avoidance_correction:.1f}', (10, 60), 
+                   cv.FONT_HERSHEY_SIMPLEX, 0.4, (255, 165, 0), 1)
+    
+    cv.imshow('img', img)
+
+    if detected:
+        color_correction = 0.4 * (128 - x)
+        total_correction = color_correction - avoidance_correction
+        robot.move(150 - total_correction, 150 + total_correction)
+
+        if size > 15000:
+            color_idx = (color_idx + 1) % 4
+            robot.rotate_left(50)
+            time.sleep(1)
+    else:
+        robot.move(-50 - avoidance_correction, 50 + avoidance_correction)
+    
+    if cv.waitKey(1) & 0xFF == ord('e'):
+        break
+
+robot.stop()
+cv.destroyAllWindows()
+sim.stopSimulation()
