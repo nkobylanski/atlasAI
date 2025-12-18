@@ -56,3 +56,45 @@ def calculate_avoidance_correction(distances, threshold=0.4):
         correction -= 15 * (1 - side_right / (threshold * 0.7))
     
     return np.clip(correction, -50, 50)
+
+def read_frame(sim, sensor):
+    buf, res = sim.getVisionSensorImg(sensor)
+    img = np.frombuffer(buf, dtype=np.uint8).reshape(*res, 3)
+    img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
+    return cv.flip(img, 1)
+
+def filter_color(img, color):
+    color_ranges = {
+        'red': ([0, 70, 50], [10, 255, 255]),
+        'green': ([36, 25, 25], [70, 255, 255]),
+        'blue': ([105, 70, 50], [130, 255, 255]),
+        'yellow': ([25, 50, 70], [35, 255, 255])
+    }
+    
+    lower, upper = color_ranges[color]
+    hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+    mask = cv.inRange(hsv, np.array(lower), np.array(upper))
+    
+    contours, _ = cv.findContours(mask, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+    
+    for contour in contours:
+        if cv.contourArea(contour) > 100:
+            area = cv.contourArea(contour)
+            x, y, w, h = cv.boundingRect(contour)
+            cx, cy = x + w // 2, y + h // 2
+            cv.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 1)
+            cv.putText(img, f'{color} ({cx}, {cy})', (x, y - 10), 
+                      cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            return img, True, cx, cy, area
+    
+    return img, False, 0, 0, 0
+
+
+client = RemoteAPIClient()
+sim = client.require('sim')
+sim.startSimulation()
+
+robot = PioneerP3DX_Robot(client)
+visionSensor = sim.getObject('./visionSensor')
+colors = ['red', 'green', 'blue', 'yellow']
+color_idx = 0
