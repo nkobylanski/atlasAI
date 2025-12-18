@@ -24,3 +24,64 @@ def main():
     lFoot = sim.getObject("/Asti/leftFootTarget")
     rFoot = sim.getObject("/Asti/rightFootTarget")
     pathRef = sim.getObject("/Asti/astiPathRef")
+
+    # Crear entorno IK
+    ikEnv = simIK.createEnvironment()
+
+    # Crear grupos IK para cada pierna
+    ikGroupLeftLeg = simIK.createGroup(ikEnv)
+    simIK.addElementFromScene(
+        ikEnv, ikGroupLeftLeg, asti, lFootTip, lFoot, simIK.constraint_pose
+    )
+
+    ikGroupRightLeg = simIK.createGroup(ikEnv)
+    simIK.addElementFromScene(
+        ikEnv, ikGroupRightLeg, asti, rFootTip, rFoot, simIK.constraint_pose
+    )
+
+    print("IK configurado correctamente")
+    print(f"- Velocidad: {vel}")
+    print(f"- Corrección izquierda: offset={leftCorrectionOff}")
+    print(f"- Corrección derecha: offset={rightCorrectionOff}")
+
+    sim.setStepping(True)
+    sim.startSimulation()
+
+    try:
+        while True:
+            # Obtener tiempo de simulación y aplicar velocidad
+            t = (sim.getSimulationTime() * vel) % times[-1]
+
+            # Interpolar poses de los pies
+            pl = sim.getPathInterpolatedConfig(leftFootPathData, times, t)
+            pr = sim.getPathInterpolatedConfig(rightFootPathData, times, t)
+
+            # Aplicar correcciones
+            for i in range(3):
+                pl[i] = pl[i] * leftCorrectionMult[i] + leftCorrectionOff[i]
+                pr[i] = pr[i] * rightCorrectionMult[i] + rightCorrectionOff[i]
+
+            # Establecer poses de los targets de los pies
+            sim.setObjectPose(lFoot, pl, pathRef)
+            sim.setObjectPose(rFoot, pr, pathRef)
+
+            # Resolver IK para ambas piernas
+            simIK.handleGroup(
+                ikEnv, ikGroupLeftLeg, {"syncWorlds": True, "allowError": True}
+            )
+            simIK.handleGroup(
+                ikEnv, ikGroupRightLeg, {"syncWorlds": True, "allowError": True}
+            )
+
+            sim.step()
+
+    except KeyboardInterrupt:
+        print("\nSimulación detenida")
+    finally:
+        simIK.eraseEnvironment(ikEnv)
+        sim.stopSimulation()
+
+
+if __name__ == "__main__":
+    main()
+
